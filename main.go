@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/gocolly/colly"
 )
@@ -21,8 +22,7 @@ func main() {
 	defer writer.Flush()
 
 	// Write CSV header
-	writer.Write([]string{"BMW 135i Coupe Manual"})
-	writer.Write([]string{"Title", "km", "Price", "State"})
+	writer.Write([]string{"Year", "Title", "Odometer", "Price", "State"})
 
 	// Instantiate default collector
 	c := colly.NewCollector(
@@ -48,11 +48,15 @@ func main() {
 
 	c.OnHTML(".listing-item", func(e *colly.HTMLElement) {
 		e.DOM.Find("div.n_width-max.title > a > h2").Children().Remove()
-		title := e.ChildText("div.n_width-max.title > a > h2")
+		fullTitle := e.ChildText("div.n_width-max.title > a > h2")
+		year := fullTitle[0:4]
+		title := fullTitle[5:]
 		odometer := e.ChildText("div:nth-child(1) > div.feature-text")
-		price := e.ChildText(".price")
-		state := e.ChildText("div.franchise-name")[0:3]
+		price := strings.TrimRight(e.ChildText(".price"), "*")
+		state := strings.TrimRight(e.ChildText("div.franchise-name"), "-")
+		state = strings.TrimSpace(state)
 		writer.Write([]string{
+			year,
 			title,
 			odometer,
 			price,
@@ -61,7 +65,12 @@ func main() {
 		log.Printf("Car Found: %s - %s, %s, %s", title, odometer, price, state)
 	})
 
-	c.Visit("https://www.carsales.com.au/cars/results/?q=%28And.Service.Carsales._.%28C.Make.BMW._.%28C.MarketingGroup.1%20Series._.Model.135i.%29%29_.GenericGearType.Manual._.BodyStyle.Coupe._.%28Or.State.Queensland._.State.New%20South%20Wales.%29%29&sortby=~Price&WT.z_srchsrcx=makemodel")
+	c.OnHTML(".next", func(e *colly.HTMLElement) {
+		link := e.ChildAttr("a", "href")
+		e.Request.Visit(link)
+	})
 
+	// c.Visit("https://www.carsales.com.au/cars/results/?q=%28And.Service.Carsales._.%28C.Make.BMW._.%28C.MarketingGroup.1%20Series._.Model.135i.%29%29_.GenericGearType.Manual._.BodyStyle.Coupe._.%28Or.State.Queensland._.State.New%20South%20Wales.%29%29&sortby=~Price&WT.z_srchsrcx=makemodel")
+	c.Visit("https://www.carsales.com.au/cars/results/?q=%28And.Service.Carsales._.GenericGearType.Manual._.BodyStyle.Coupe._.%28Or.State.Queensland._.State.New%20South%20Wales.%29%29&sortby=~Price&WT.z_srchsrcx=makemodel")
 	log.Printf("Scraping finished, check file %q for results\n", fName)
 }
